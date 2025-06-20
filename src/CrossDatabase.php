@@ -4,21 +4,21 @@ namespace MongoLitePlus;
 
 class CrossDatabase
 {
-    protected FeatureDatabase $featureDB;
+    protected Client $client;
     protected array $cache = [];
     protected array $listeners = [];
 
-    public function __construct(FeatureDatabase $featureDB)
+    public function __construct(Client $client)
     {
-        $this->featureDB = $featureDB;
+        $this->client = $client;
     }
 
-    public function getDocument(string $feature, string $collection, string $id): ?array
+    public function getDocument(string $database, string $collection, string $id): ?array
     {
-        $cacheKey = "$feature.$collection.$id";
+        $cacheKey = "$database.$collection.$id";
 
         if (!isset($this->cache[$cacheKey])) {
-            $db = $this->featureDB->getDatabase($feature);
+            $db = $this->client->getDatabase($database);
             $this->cache[$cacheKey] = $db->$collection->findOne(['_id' => $id]);
         }
 
@@ -30,10 +30,10 @@ class CrossDatabase
         $result = [];
 
         foreach ($relationDef as $key => $target) {
-            [$feature, $collection] = explode('.', $target);
+            [$database, $collection] = explode('.', $target);
 
             if (isset($sourceDoc[$key])) {
-                $result[$key] = $this->getDocument($feature, $collection, $sourceDoc[$key]);
+                $result[$key] = $this->getDocument($database, $collection, $sourceDoc[$key]);
             }
         }
 
@@ -42,72 +42,79 @@ class CrossDatabase
 
     public function getManyRelated(string $sourceId, string $relationDef): array
     {
-        // Perbaikan parsing relationDef
         $parts = explode(':', $relationDef);
 
         if (count($parts) < 3) {
             throw new \InvalidArgumentException("Invalid relation definition: $relationDef");
         }
 
-        $feature = $parts[0];
-        $collection = $parts[1];
-        $field = $parts[2];
+        [$database, $collection, $field] = $parts;
 
-        $db = $this->featureDB->getDatabase($feature);
+        $db = $this->client->getDatabase($database);
         return $db->$collection->find([$field => $sourceId])->toArray();
     }
 
-    public function preloadDocuments(array $ids, string $feature, string $collection): void
+    public function preloadDocuments(array $ids, string $database, string $collection): void
     {
-        $db = $this->featureDB->getDatabase($feature);
+        if (empty($ids)) return;
+
+        $db = $this->client->getDatabase($database);
         $docs = $db->$collection->find(['_id' => ['$in' => $ids]])->toArray();
 
         foreach ($docs as $doc) {
-            $cacheKey = "$feature.$collection.{$doc['_id']}";
+            $cacheKey = "$database.$collection.{$doc['_id']}";
             $this->cache[$cacheKey] = $doc;
         }
     }
 
-    public function onUpdate(string $feature, string $collection, callable $callback): void
+    public function onUpdate(string $database, string $collection, callable $callback): void
     {
-        $key = "$feature.$collection";
+        $key = "$database.$collection";
         $this->listeners[$key][] = $callback;
     }
 
-    public function handleUpdate(string $feature, string $collection, string $id, array $newData): void
+    public function handleUpdate(string $database, string $collection, string $id, array $newData): void
     {
-        $key = "$feature.$collection.$id";
+        $key = "$database.$collection.$id";
 
-        // Update cache
         if (isset($this->cache[$key])) {
             $this->cache[$key] = array_merge($this->cache[$key], $newData);
         }
 
-        // Trigger listeners
-        if (isset($this->listeners["$feature.$collection"])) {
-            foreach ($this->listeners["$feature.$collection"] as $callback) {
+        if (isset($this->listeners["$database.$collection"])) {
+            foreach ($this->listeners["$database.$collection"] as $callback) {
                 $callback($id, $newData);
             }
         }
     }
 
-    public function embedData(string $sourceFeature, string $sourceCollection, string $sourceId, array $embedRules): array
+    public function embedData(string $sourceDb, string $sourceColl, string $sourceId, array $embedRules): array
     {
-        $sourceDoc = $this->getDocument($sourceFeature, $sourceCollection, $sourceId);
+        $sourceDoc = $this->getDocument($sourceDb, $sourceColl, $sourceId);
+
+        if (!$sourceDoc) {
+            return [];
+        }
+
         $embedded = [];
 
         foreach ($embedRules as $embedKey => $rule) {
-            [$targetFeature, $targetCollection, $targetField] = explode(':', $rule);
+            $parts = explode(':', $rule);
+            if (count($parts) < 3) continue;
+
+            [$targetDb, $targetColl, $targetField] = $parts;
 
             if (isset($sourceDoc[$targetField])) {
-                $embedded[$embedKey] = $this->getDocument(
-                    $targetFeature,
-                    $targetCollection,
-                    $sourceDoc[$targetField]
-                );
+                $targetId = $sourceDoc[$targetField];
+                $embedded[$embedKey] = $this->getDocument($targetDb, $targetColl, $targetId);
             }
         }
 
         return array_merge($sourceDoc, $embedded);
+    }
+
+    public function clearCache(): void
+    {
+        $this->cache = [];
     }
 }

@@ -81,7 +81,9 @@ class Cursor implements \IteratorAggregate
                         ? $va <=> $vb
                         : strcmp((string)$va, (string)$vb);
 
-                    return ($o === 1) ? $res : -$res;
+                    if ($res !== 0) {
+                        return ($o === 1) ? $res : -$res;
+                    }
                 }
                 return 0;
             });

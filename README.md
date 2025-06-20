@@ -4,6 +4,19 @@
 [![Packagist](https://img.shields.io/packagist/v/herdianrony/mongolite-plus.svg)](https://packagist.org/packages/herdianrony/mongolite-plus)
 [![PHP Version](https://img.shields.io/badge/php-%3E=8.0-blue.svg)](https://www.php.net/releases/)
 
+```mermaid
+
+graph TD
+    A[Client] -->|selectDB| B[Database: testdb.sqlite]
+    B -->|selectCollection| C[Collection: products]
+    B -->|selectCollection| D[Collection: users]
+    C -->|CRUD| E[Data Product]
+    D -->|CRUD| F[Data User]
+
+```
+
+## Overview
+
 MongoLitePlus adalah pustaka database ringan dan berorientasi dokumen untuk PHP, dibangun di atas SQLite.
 
 > 📌 _MongoLitePlus terinspirasi dari [Mongo-Lite](https://github.com/agentejo/mongo-lite) oleh Agentejo. Proyek ini merupakan versi yang dibangun ulang dengan fitur tambahan seperti relasi, indeksasi lanjutan, dan dukungan multi-database modular._ Ia menyediakan antarmuka seperti MongoDB dengan kesederhanaan dan portabilitas dari SQLite.
