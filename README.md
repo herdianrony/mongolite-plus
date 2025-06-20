@@ -4,12 +4,6 @@
 [![Packagist](https://img.shields.io/packagist/v/herdianrony/mongolite-plus.svg)](https://packagist.org/packages/herdianrony/mongolite-plus)
 [![PHP Version](https://img.shields.io/badge/php-%3E=8.0-blue.svg)](https://www.php.net/releases/)
 
-# MongoLitePlus
-
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Packagist](https://img.shields.io/packagist/v/herdianrony/mongolite-plus.svg)](https://packageto.org/packages/herdianrony/mongolite-plus)
-[![PHP Version](https://img.shields.io/badge/php-%3E=8.0-blue.svg)](https://www.php.net/releases/)
-
 ```mermaid
 graph TD
     subgraph Client
