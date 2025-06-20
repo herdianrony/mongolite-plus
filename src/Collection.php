@@ -453,4 +453,57 @@ class Collection
         $data[8] = chr(ord($data[8]) & 0x3F | 0x80);
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
+
+    public function join(
+        Collection $foreignCollection,
+        string $localField,
+        string $foreignField,
+        string $as = 'joined',
+        string $joinType = 'inner'
+    ): array {
+        // Ambil semua dokumen lokal
+        $localDocs = $this->find()->toArray();
+
+        // Kumpulkan nilai untuk foreign key
+        $foreignKeys = array_column($localDocs, $localField);
+        $foreignKeys = array_unique(array_filter($foreignKeys));
+
+        // Jika tidak ada foreign keys, kembalikan dokumen kosong
+        if (empty($foreignKeys)) {
+            foreach ($localDocs as &$doc) {
+                $doc[$as] = ($joinType === 'left') ? [] : null;
+            }
+            return $localDocs;
+        }
+
+        // Ambil dokumen asing terkait
+        $foreignDocs = $foreignCollection->find([
+            $foreignField => ['$in' => $foreignKeys]
+        ])->toArray();
+
+        // Buat mapping: foreignKey => [dokumen1, dokumen2, ...]
+        $mapping = [];
+        foreach ($foreignDocs as $doc) {
+            $key = $doc[$foreignField] ?? null;
+            if ($key !== null) {
+                if (!isset($mapping[$key])) {
+                    $mapping[$key] = [];
+                }
+                $mapping[$key][] = $doc;
+            }
+        }
+
+        // Gabungkan data
+        foreach ($localDocs as &$doc) {
+            $key = $doc[$localField] ?? null;
+
+            if (isset($mapping[$key])) {
+                $doc[$as] = $mapping[$key];
+            } else {
+                $doc[$as] = ($joinType === 'left') ? [] : null;
+            }
+        }
+
+        return $localDocs;
+    }
 }
