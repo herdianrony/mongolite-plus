@@ -1,20 +1,44 @@
 # MongoLitePlus
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Packagist](https://img.shields.io/packagist/v/herdianrony/mongolite-plus.svg)](https://packagist.org/packages/herdianrony/mongolite-plus)
+[![Packagist](https://img.shields.io/badge/packagist-v1.0.0-blue.svg)](https://packageto.org/packages/herdianrony/mongolite-plus)
 [![PHP Version](https://img.shields.io/badge/php-%3E=8.0-blue.svg)](https://www.php.net/releases/)
 
 ```mermaid
-graph LR
-    A[Client] -->|crossDatabase| B(CrossDatabase)
-    B -->|getDocument| C[Database1: user_db.sqlite]
-    B -->|getDocument| D[Database2: product_db.sqlite]
-    C -->|users| E[User Data]
-    D -->|products| F[Product Data]
-    E -->|"user_id"| G[Relations]
-    F -->|"seller_id"| G
-    H[App] --> B
-    B -->|embedData| I["Embedded Data (User + Product)"]
+graph TD
+    subgraph Client
+        A[Client] -->|getDatabase('db1')| B[db1.sqlite]
+        A -->|getDatabase('db2')| C[db2.sqlite]
+        A -->|getCrossDatabase()| CD[CrossDatabase Service]
+    end
+
+    subgraph DatabaseOperations
+        B -->|getCollection('users')| B1[users]
+        B -->|getCollection('products')| B2[products]
+        C -->|getCollection('orders')| C1[orders]
+    end
+
+    subgraph CrossDatabaseFeatures
+        CD -->|getDocument(db, coll, id)| D1[Cached Document Access]
+        CD -->|getRelated(sourceDoc, def)| D2[Fetch Related Data]
+        CD -->|embedData(sourceDb, sourceColl, id, rules)| D3[Embed Data Across DBs]
+        CD -->|migrateData(fromDb, toDb, coll, filter)| D4[Migrate Data]
+        D2 -- Relates To --> B1 & B2 & C1
+        D3 -- Embeds From --> B1 & B2 & C1
+        D4 -- Moves Data Between --> B & C
+    end
+
+    subgraph AdvancedFeatures
+        B -->|backupDatabase()| E1[Backup Management]
+        A -->|backupAll()| E2[Full System Backup]
+        A -->|getShardedCollection()| E3[Sharding Support (Logical)]
+        B -->|getDatabaseMetrics()| E4[Database Metrics]
+        B -- Optional --> B_ENC(Encrypted Database)
+    end
+
+    B1 -->|CRUD/Query/Aggregate| F[Document Operations]
+    B2 -->|CRUD/Query/Aggregate| G[Document Operations]
+    C1 -->|CRUD/Query/Aggregate| H[Document Operations]
 
 ```
 
