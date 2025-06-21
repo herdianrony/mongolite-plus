@@ -4,6 +4,7 @@ namespace MongoLitePlus;
 
 use PDO;
 use Exception;
+use MongoLitePlus\InvalidEncryptionKeyException;
 
 class Database
 {
@@ -27,8 +28,29 @@ class Database
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
         if ($this->encryptionKey) {
-            $this->pdo->exec("PRAGMA key = '{$this->encryptionKey}'");
-            $this->pdo->exec("PRAGMA cipher_compatibility = 4");
+            try {
+                // Set key with escaping
+                $safeKey = str_replace("'", "''", $this->encryptionKey);
+                $this->pdo->exec("PRAGMA key = '$safeKey'");
+                $this->pdo->exec("PRAGMA cipher_compatibility = 4");
+
+                // Check if SQLCipher is available
+                $cipherVersion = $this->pdo->query("PRAGMA cipher_version")->fetchColumn();
+                if (!$cipherVersion) {
+                    throw new Exception("SQLCipher not available");
+                }
+
+                // Validate decryption key
+                $result = $this->pdo->query("SELECT count(*) FROM sqlite_master")->fetchColumn();
+                if ((int)$result === 0) {
+                    throw new InvalidEncryptionKeyException("Database cannot be decrypted or is empty");
+                }
+            } catch (\PDOException $e) {
+                if (str_contains($e->getMessage(), 'file is not a database')) {
+                    throw new InvalidEncryptionKeyException();
+                }
+                throw new Exception("SQLCipher error: " . $e->getMessage());
+            }
         }
 
         $this->pdo->exec("PRAGMA journal_mode = WAL");
@@ -44,6 +66,11 @@ class Database
     public function getPdo(): PDO
     {
         return $this->pdo;
+    }
+
+    public function getFilePath(): string
+    {
+        return $this->filePath;
     }
 
     public function listCollections(): array
@@ -79,11 +106,14 @@ class Database
     public function changeEncryptionKey(string $newKey): bool
     {
         try {
-            $this->pdo->exec("PRAGMA rekey = '{$newKey}'");
+            $this->pdo->query("SELECT count(*) FROM sqlite_master")->fetch();
+            $safeNewKey = str_replace("'", "''", $newKey);
+            $this->pdo->exec("PRAGMA rekey = '$safeNewKey'");
             $this->encryptionKey = $newKey;
+            $this->pdo->query("SELECT count(*) FROM sqlite_master")->fetch();
             return true;
-        } catch (Exception $e) {
-            return false;
+        } catch (\PDOException $e) {
+            throw new Exception("Key change failed: " . $e->getMessage());
         }
     }
 
@@ -122,13 +152,7 @@ class Database
 
         $metrics = [];
         foreach ($tables as $table) {
-            // Skip system tables
-            if ($table === 'sqlite_sequence' || $table === '_relations') {
-                continue;
-            }
-
-            // Skip index tables
-            if (strpos($table, '_index') !== false) {
+            if ($table === 'sqlite_sequence' || $table === '_relations' || str_contains($table, '_index')) {
                 continue;
             }
 
@@ -136,7 +160,6 @@ class Database
                 $count = $this->pdo->query("SELECT COUNT(*) FROM " . $this->quote($table))->fetchColumn();
                 $size = $this->calculateTableSize($table);
             } catch (\PDOException $e) {
-                // Skip tables that can't be queried
                 continue;
             }
 
@@ -160,24 +183,26 @@ class Database
         }
     }
 
-    protected function getTableSize(string $table): int
-    {
-        $stmt = $this->pdo->prepare("
-            SELECT SUM(pgsize) 
-            FROM dbstat 
-            WHERE name = :table
-        ");
-        $stmt->execute([':table' => $table]);
-        return (int) $stmt->fetchColumn();
-    }
-
     protected function quote(string $s): string
     {
         return '"' . str_replace('"', '""', $s) . '"';
     }
 
-    public function getFilePath(): string
+    public static function encryptExisting(string $sourcePath, string $targetPath, string $key): bool
     {
-        return $this->filePath;
+        $keySafe = str_replace("'", "''", $key);
+        $cmd = <<<EOD
+echo "ATTACH DATABASE '$targetPath' AS encrypted KEY '$keySafe';
+SELECT sqlcipher_export('encrypted');
+DETACH DATABASE encrypted;" | sqlcipher '$sourcePath'
+EOD;
+        shell_exec($cmd);
+        return file_exists($targetPath);
+    }
+
+    public static function isEncrypted(string $path): bool
+    {
+        $output = shell_exec("strings " . escapeshellarg($path) . " | grep 'SQLite format 3'");
+        return trim($output) === '';
     }
 }

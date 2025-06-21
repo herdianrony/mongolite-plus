@@ -22,7 +22,7 @@ class Client
 
     public function getDatabase(string $name, ?string $encryptionKey = null): Database
     {
-        $cacheKey = $name . ($encryptionKey ? '_encrypted' : '');
+        $cacheKey = $name . ($encryptionKey ? '_' . md5($encryptionKey) : '');
         if (!isset($this->databases[$cacheKey])) {
             $file = $this->dataPath . DIRECTORY_SEPARATOR . $name . '.sqlite';
             $this->databases[$cacheKey] = new Database($file, $encryptionKey);

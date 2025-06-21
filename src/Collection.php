@@ -83,6 +83,9 @@ class Collection
         $doc['_created_at'] = $now;
         $doc['_updated_at'] = $now;
 
+        // Remove 'id' field to prevent duplication
+        unset($doc['id']);
+
         $json = json_encode($doc, JSON_UNESCAPED_UNICODE);
         $tbl = $this->quote($this->name);
 
@@ -149,6 +152,7 @@ class Collection
         foreach ($doc as $key => $value) {
             $fullKey = $prefix ? "{$prefix}.{$key}" : $key;
 
+            // Skip 'id' field
             if ($key === 'id') continue;
 
             if (is_array($value)) {
